@@ -41,7 +41,6 @@ This makes the app better suited for situations where schedules change, meals ar
 ## Current Project Status
 
 - `index.html`, `styles.css`, and `app.js` contain the HTML prototype.
-- `D:\Code\MyApplication` contains the Android Studio project.
 - The Android prototype currently focuses on UI and workflow validation.
 - System-level reminders are planned for the next development stage.
 
