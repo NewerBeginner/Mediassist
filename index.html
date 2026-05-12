@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mediassist 用药提醒原型</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="topbar">
+        <div>
+          <p class="eyebrow">Mediassist</p>
+          <h1>用药提醒</h1>
+          <p id="todayLabel" class="muted"></p>
+        </div>
+        <button id="resetBtn" class="ghost-button" type="button">重置</button>
+      </section>
+
+      <section class="status-strip">
+        <article><span id="medicineCount">0</span><p>药品</p></article>
+        <article><span id="doneCount">0</span><p>已确认</p></article>
+        <article><span id="pendingCount">0</span><p>待确认</p></article>
+        <article><span id="lateCount">0</span><p>逾期</p></article>
+      </section>
+
+      <details class="panel" id="routinePanel">
+        <summary>
+          <div>
+            <h2>每日作息</h2>
+            <p class="muted">饭点和睡前时间供饭前/睡前规则使用。</p>
+          </div>
+          <span class="arrow">⌄</span>
+        </summary>
+        <div class="form-grid routine-grid">
+          <label>查看日期<input id="viewDate" type="date" /></label>
+          <div id="breakfastTime"></div>
+          <div id="lunchTime"></div>
+          <div id="dinnerTime"></div>
+          <div id="bedtime"></div>
+        </div>
+      </details>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>系统提醒</h2>
+            <p class="muted">HTML 版只展示设置；Android 版会接通知、震动、铃声和锁屏操作。</p>
+          </div>
+        </div>
+        <div id="reminderSettings" class="switch-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>药品管理</h2>
+            <p class="muted">添加和编辑在窗口里完成，主屏优先保留用药确认。</p>
+          </div>
+          <button id="addMedicineBtn" class="primary-button" type="button">添加药品</button>
+        </div>
+        <div id="medicineSettings" class="medicine-settings"></div>
+      </section>
+
+      <section class="timeline-section">
+        <div class="section-heading">
+          <div>
+            <h2>用药确认</h2>
+            <p id="nextDoseText" class="muted"></p>
+          </div>
+          <button id="simulateBtn" class="ghost-button" type="button">模拟提醒</button>
+        </div>
+        <div id="activeReminder" class="active-reminder empty-state">还没有触发提醒。</div>
+        <div id="timeline" class="timeline"></div>
+      </section>
+    </main>
+
+    <dialog id="medicineDialog" class="editor-dialog">
+      <form method="dialog" id="medicineForm">
+        <h2 id="medicineDialogTitle">添加药品</h2>
+        <div id="medicineEditor" class="editor-body"></div>
+        <menu>
+          <button id="deleteMedicineBtn" class="danger-button" value="delete" type="submit">删除</button>
+          <span class="menu-spacer"></span>
+          <button value="cancel" type="submit">取消</button>
+          <button class="primary-button" value="save" type="submit">保存</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="delayDialog" class="editor-dialog small-dialog">
+      <form method="dialog">
+        <h2 id="delayTitle">延后药品</h2>
+        <p class="muted">默认延后 10 分钟，也可以选择更久。</p>
+        <div class="delay-options">
+          <button value="10" type="submit">10 分钟</button>
+          <button value="30" type="submit">30 分钟</button>
+          <button value="60" type="submit">60 分钟</button>
+        </div>
+        <menu>
+          <span class="menu-spacer"></span>
+          <button value="cancel" type="submit">取消</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>
