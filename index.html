@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Mediassist 用药提醒原型</title>
+    <title>Mediassist Prototype</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -11,95 +11,125 @@
       <section class="topbar">
         <div>
           <p class="eyebrow">Mediassist</p>
-          <h1>用药提醒</h1>
-          <p id="todayLabel" class="muted"></p>
+          <h1>&#29992;&#33647;&#25552;&#37266;</h1>
+          <button id="dateToggleBtn" class="date-toggle" type="button">
+            <span id="todayLabel"></span>
+            <span class="date-toggle-arrow">⌄</span>
+          </button>
         </div>
-        <button id="resetBtn" class="ghost-button" type="button">重置</button>
+        <div class="top-actions">
+          <button id="moreBtn" class="icon-button" type="button" aria-label="Settings">⋮</button>
+          <button id="resetBtn" class="ghost-button" type="button">&#37325;&#32622;</button>
+        </div>
+      </section>
+
+      <section id="calendarPanel" class="calendar-panel" hidden>
+        <div class="calendar-toolbar">
+          <button id="prevYearBtn" class="mini-button" type="button">&lt;&lt;</button>
+          <button id="prevMonthBtn" class="mini-button" type="button">&lt;</button>
+          <select id="calendarYear" aria-label="Select year"></select>
+          <select id="calendarMonth" aria-label="Select month"></select>
+          <button id="nextMonthBtn" class="mini-button" type="button">&gt;</button>
+          <button id="nextYearBtn" class="mini-button" type="button">&gt;&gt;</button>
+        </div>
+        <div id="weekCalendar" class="week-calendar"></div>
+        <div id="monthCalendar" class="month-calendar" hidden></div>
+        <button id="calendarExpandBtn" class="calendar-grip" type="button" aria-label="Expand calendar">
+          <span></span>
+        </button>
       </section>
 
       <section class="status-strip">
-        <article><span id="medicineCount">0</span><p>药品</p></article>
-        <article><span id="doneCount">0</span><p>已确认</p></article>
-        <article><span id="pendingCount">0</span><p>待确认</p></article>
-        <article><span id="lateCount">0</span><p>逾期</p></article>
+        <article><span id="medicineCount">0</span><p>&#33647;&#21697;</p></article>
+        <article><span id="doneCount">0</span><p>&#24050;&#30830;&#35748;</p></article>
+        <article><span id="pendingCount">0</span><p>&#24453;&#30830;&#35748;</p></article>
+        <article><span id="lateCount">0</span><p>&#36830;&#26399;</p></article>
       </section>
 
-      <details class="panel" id="routinePanel">
+      <details class="panel medicine-panel">
         <summary>
           <div>
-            <h2>每日作息</h2>
-            <p class="muted">饭点和睡前时间供饭前/睡前规则使用。</p>
+            <h2>&#33647;&#21697;&#31649;&#29702;</h2>
+            <p class="muted">&#28155;&#21152;&#21644;&#32534;&#36753;&#22312;&#31383;&#21475;&#37324;&#23436;&#25104;&#65292;&#20027;&#23631;&#20248;&#20808;&#20445;&#30041;&#29992;&#33647;&#30830;&#35748;&#12290;</p>
           </div>
           <span class="arrow">⌄</span>
         </summary>
-        <div class="form-grid routine-grid">
-          <label>查看日期<input id="viewDate" type="date" /></label>
-          <div id="breakfastTime"></div>
-          <div id="lunchTime"></div>
-          <div id="dinnerTime"></div>
-          <div id="bedtime"></div>
-        </div>
-      </details>
-
-      <section class="panel">
-        <div class="panel-heading">
-          <div>
-            <h2>系统提醒</h2>
-            <p class="muted">HTML 版只展示设置；Android 版会接通知、震动、铃声和锁屏操作。</p>
-          </div>
-        </div>
-        <div id="reminderSettings" class="switch-grid"></div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-heading">
-          <div>
-            <h2>药品管理</h2>
-            <p class="muted">添加和编辑在窗口里完成，主屏优先保留用药确认。</p>
-          </div>
-          <button id="addMedicineBtn" class="primary-button" type="button">添加药品</button>
-        </div>
         <div id="medicineSettings" class="medicine-settings"></div>
-      </section>
+      </details>
 
       <section class="timeline-section">
         <div class="section-heading">
           <div>
-            <h2>用药确认</h2>
+            <h2>&#29992;&#33647;&#30830;&#35748;</h2>
             <p id="nextDoseText" class="muted"></p>
           </div>
-          <button id="simulateBtn" class="ghost-button" type="button">模拟提醒</button>
+          <button id="simulateBtn" class="ghost-button" type="button">&#27169;&#25311;&#25552;&#37266;</button>
         </div>
-        <div id="activeReminder" class="active-reminder empty-state">还没有触发提醒。</div>
+        <div id="activeReminder" class="active-reminder empty-state">&#36824;&#27809;&#26377;&#35302;&#21457;&#25552;&#37266;&#12290;</div>
         <div id="timeline" class="timeline"></div>
       </section>
     </main>
 
+    <button id="fabAddBtn" class="fab" type="button" aria-label="Add medicine">+</button>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <dialog id="settingsDialog" class="editor-dialog settings-dialog">
+      <form method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <h2>&#35774;&#32622;</h2>
+            <p class="muted">&#20316;&#24687;&#21644;&#31995;&#32479;&#25552;&#37266;&#26159;&#20302;&#39057;&#35774;&#32622;&#65292;&#25918;&#22312;&#36825;&#37324;&#20445;&#25345;&#20027;&#23631;&#28165;&#29245;&#12290;</p>
+          </div>
+        </div>
+
+        <section class="settings-section">
+          <h3>&#27599;&#26085;&#20316;&#24687;</h3>
+          <div class="form-grid routine-grid">
+            <div id="breakfastTime"></div>
+            <div id="lunchTime"></div>
+            <div id="dinnerTime"></div>
+            <div id="bedtime"></div>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h3>&#31995;&#32479;&#25552;&#37266;</h3>
+          <p class="muted">HTML &#29256;&#21482;&#23637;&#31034;&#35774;&#32622;&#65307;Android &#29256;&#20250;&#25509;&#36890;&#30693;&#12289;&#38663;&#21160;&#12289;&#38083;&#22768;&#21644;&#38145;&#23631;&#25805;&#20316;&#12290;</p>
+          <div id="reminderSettings" class="switch-grid"></div>
+        </section>
+
+        <menu>
+          <span class="menu-spacer"></span>
+          <button class="primary-button" value="close" type="submit">&#23436;&#25104;</button>
+        </menu>
+      </form>
+    </dialog>
+
     <dialog id="medicineDialog" class="editor-dialog">
-      <form method="dialog" id="medicineForm">
-        <h2 id="medicineDialogTitle">添加药品</h2>
+      <form method="dialog">
+        <h2 id="medicineDialogTitle">&#28155;&#21152;&#33647;&#21697;</h2>
         <div id="medicineEditor" class="editor-body"></div>
         <menu>
-          <button id="deleteMedicineBtn" class="danger-button" value="delete" type="submit">删除</button>
+          <button id="deleteMedicineBtn" class="danger-button" value="delete" type="submit">&#21024;&#38500;</button>
           <span class="menu-spacer"></span>
-          <button value="cancel" type="submit">取消</button>
-          <button class="primary-button" value="save" type="submit">保存</button>
+          <button value="cancel" type="submit">&#21462;&#28040;</button>
+          <button class="primary-button" value="save" type="submit">&#20445;&#23384;</button>
         </menu>
       </form>
     </dialog>
 
     <dialog id="delayDialog" class="editor-dialog small-dialog">
       <form method="dialog">
-        <h2 id="delayTitle">延后药品</h2>
-        <p class="muted">默认延后 10 分钟，也可以选择更久。</p>
+        <h2 id="delayTitle">&#24310;&#21518;&#33647;&#21697;</h2>
+        <p class="muted">&#40664;&#35748;&#24310;&#21518; 10 &#20998;&#38047;&#65292;&#20063;&#21487;&#20197;&#36873;&#25321;&#26356;&#20037;&#12290;</p>
         <div class="delay-options">
-          <button value="10" type="submit">10 分钟</button>
-          <button value="30" type="submit">30 分钟</button>
-          <button value="60" type="submit">60 分钟</button>
+          <button value="10" type="submit">10 &#20998;&#38047;</button>
+          <button value="30" type="submit">30 &#20998;&#38047;</button>
+          <button value="60" type="submit">60 &#20998;&#38047;</button>
         </div>
         <menu>
           <span class="menu-spacer"></span>
-          <button value="cancel" type="submit">取消</button>
+          <button value="cancel" type="submit">&#21462;&#28040;</button>
         </menu>
       </form>
     </dialog>

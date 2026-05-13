@@ -1,5 +1,5 @@
-const STORAGE_KEY = "mediassist-html-prototype-v4";
-const DAYS = ["日", "一", "二", "三", "四", "五", "六"];
+const STORAGE_KEY = "mediassist-html-prototype-v5";
+const DAYS = ["\u65e5", "\u4e00", "\u4e8c", "\u4e09", "\u56db", "\u4e94", "\u516d"];
 const PALETTE = ["#1f7a5a", "#235d8d", "#b45f06", "#7a3db8", "#b44336", "#59722e", "#0f766e", "#9a3412"];
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
@@ -25,20 +25,35 @@ let state = loadState();
 let editingId = null;
 let draft = null;
 let delayTargetId = null;
+let toastTimer = null;
+let calendarExpanded = false;
+let calendarCursor = dateFromKey(state.settings.viewDate);
 
 const els = {
   todayLabel: document.querySelector("#todayLabel"),
+  dateToggleBtn: document.querySelector("#dateToggleBtn"),
+  calendarPanel: document.querySelector("#calendarPanel"),
+  weekCalendar: document.querySelector("#weekCalendar"),
+  monthCalendar: document.querySelector("#monthCalendar"),
+  calendarExpandBtn: document.querySelector("#calendarExpandBtn"),
+  calendarYear: document.querySelector("#calendarYear"),
+  calendarMonth: document.querySelector("#calendarMonth"),
+  prevYearBtn: document.querySelector("#prevYearBtn"),
+  prevMonthBtn: document.querySelector("#prevMonthBtn"),
+  nextMonthBtn: document.querySelector("#nextMonthBtn"),
+  nextYearBtn: document.querySelector("#nextYearBtn"),
   medicineCount: document.querySelector("#medicineCount"),
   doneCount: document.querySelector("#doneCount"),
   pendingCount: document.querySelector("#pendingCount"),
   lateCount: document.querySelector("#lateCount"),
-  viewDate: document.querySelector("#viewDate"),
   timeline: document.querySelector("#timeline"),
   activeReminder: document.querySelector("#activeReminder"),
   nextDoseText: document.querySelector("#nextDoseText"),
   medicineSettings: document.querySelector("#medicineSettings"),
   reminderSettings: document.querySelector("#reminderSettings"),
-  addMedicineBtn: document.querySelector("#addMedicineBtn"),
+  moreBtn: document.querySelector("#moreBtn"),
+  settingsDialog: document.querySelector("#settingsDialog"),
+  fabAddBtn: document.querySelector("#fabAddBtn"),
   resetBtn: document.querySelector("#resetBtn"),
   simulateBtn: document.querySelector("#simulateBtn"),
   medicineDialog: document.querySelector("#medicineDialog"),
@@ -47,17 +62,18 @@ const els = {
   deleteMedicineBtn: document.querySelector("#deleteMedicineBtn"),
   delayDialog: document.querySelector("#delayDialog"),
   delayTitle: document.querySelector("#delayTitle"),
+  toast: document.querySelector("#toast"),
 };
 
 function seedMedicines() {
   const today = dateKey(new Date());
   return [
-    createMedicine({ id: "med-a", name: "药 A", color: "#5b6ee1", startDate: today, bedtimeEnabled: true }),
-    createMedicine({ id: "med-b", name: "药 B", color: "#1f7a5a", startDate: today, fixedTimes: "08:00, 20:00" }),
-    createMedicine({ id: "med-c", name: "药 C", color: "#235d8d", startDate: today, fixedTimes: "08:00, 20:00" }),
+    createMedicine({ id: "med-a", name: "\u836f A", color: "#5b6ee1", startDate: today, bedtimeEnabled: true }),
+    createMedicine({ id: "med-b", name: "\u836f B", color: "#1f7a5a", startDate: today, fixedTimes: "08:00, 20:00" }),
+    createMedicine({ id: "med-c", name: "\u836f C", color: "#235d8d", startDate: today, fixedTimes: "08:00, 20:00" }),
     createMedicine({
       id: "med-d",
-      name: "药 D",
+      name: "\u836f D",
       color: "#b45f06",
       startDate: today,
       mealBefore: { breakfast: true, lunch: true, dinner: true },
@@ -69,9 +85,9 @@ function seedMedicines() {
 function createMedicine(overrides = {}) {
   return {
     id: overrides.id || createId(),
-    name: overrides.name || "新药品",
+    name: overrides.name || "\u65b0\u836f\u54c1",
     color: overrides.color || PALETTE[0],
-    doseAmount: overrides.doseAmount || "1 片",
+    doseAmount: overrides.doseAmount || "1 \u7247",
     startDate: overrides.startDate || dateKey(new Date()),
     courseLength: Number(overrides.courseLength) || 14,
     totalCourses: Number(overrides.totalCourses) || 1,
@@ -104,8 +120,16 @@ function loadState() {
   }
 }
 
-function saveState() {
+function saveState(message) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if (message) showToast(message);
+}
+
+function showToast(message) {
+  clearTimeout(toastTimer);
+  els.toast.textContent = message;
+  els.toast.classList.add("visible");
+  toastTimer = setTimeout(() => els.toast.classList.remove("visible"), 1800);
 }
 
 function dateKey(date) {
@@ -115,6 +139,28 @@ function dateKey(date) {
 function dateFromKey(key) {
   const [y, m, d] = key.split("-").map(Number);
   return new Date(y, m - 1, d);
+}
+
+function addDays(date, amount) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return next;
+}
+
+function startOfWeek(date) {
+  return addDays(date, -date.getDay());
+}
+
+function isSameDay(a, b) {
+  return dateKey(a) === dateKey(b);
+}
+
+function setViewDate(key) {
+  state.settings.viewDate = key;
+  calendarCursor = dateFromKey(key);
+  state.activeIds = [];
+  saveState();
+  render();
 }
 
 function createId() {
@@ -151,13 +197,13 @@ function parseTimes(value) {
     .sort((a, b) => timeToMinutes(a) - timeToMinutes(b));
 }
 
-function selectedDay() {
-  return dateFromKey(state.settings.viewDate).getDay();
+function selectedDay(viewDate = state.settings.viewDate) {
+  return dateFromKey(viewDate).getDay();
 }
 
-function courseProgress(med) {
+function courseProgress(med, viewDate = state.settings.viewDate) {
   const start = dateFromKey(med.startDate);
-  const view = dateFromKey(state.settings.viewDate);
+  const view = dateFromKey(viewDate);
   const dayCount = Math.round((view - start) / 86400000) + 1;
   const courseLength = Math.max(1, Number(med.courseLength) || 1);
   const totalCourses = Math.max(1, Number(med.totalCourses) || 1);
@@ -174,38 +220,38 @@ function courseProgress(med) {
 
 function progressText(med) {
   const p = courseProgress(med);
-  if (p.dayCount <= 0) return `距离开始还有 ${Math.abs(p.dayCount) + 1} 天`;
-  if (p.over) return `已超过计划：第 ${p.dayCount} / ${p.totalDays} 天`;
-  return `第 ${p.dayCount} / ${p.totalDays} 天 · 第 ${p.courseNumber} / ${p.totalCourses} 疗程`;
+  if (p.dayCount <= 0) return `\u8ddd\u79bb\u5f00\u59cb\u8fd8\u6709 ${Math.abs(p.dayCount) + 1} \u5929`;
+  if (p.over) return `\u5df2\u8d85\u8fc7\u8ba1\u5212\uff1a\u7b2c ${p.dayCount} / ${p.totalDays} \u5929`;
+  return `\u7b2c ${p.dayCount} / ${p.totalDays} \u5929 · \u7b2c ${p.courseNumber} / ${p.totalCourses} \u7597\u7a0b`;
 }
 
-function buildDoses() {
+function buildDoses(viewDate = state.settings.viewDate) {
   const mealTimes = {
     breakfast: state.settings.breakfastTime,
     lunch: state.settings.lunchTime,
     dinner: state.settings.dinnerTime,
   };
-  const mealLabels = { breakfast: "早餐前", lunch: "午餐前", dinner: "晚饭前" };
+  const mealLabels = { breakfast: "\u65e9\u9910\u524d", lunch: "\u5348\u9910\u524d", dinner: "\u665a\u996d\u524d" };
   const doses = [];
   for (const med of state.medicines) {
-    if (!courseProgress(med).active || !med.repeatDays.includes(selectedDay())) continue;
-    for (const time of parseTimes(med.fixedTimes)) doses.push(createDose(med, time, "fixed", "固定时间"));
-    for (const time of parseTimes(med.flexibleTimes)) doses.push(createDose(med, time, "flexible", "非固定时间"));
+    if (!courseProgress(med, viewDate).active || !med.repeatDays.includes(selectedDay(viewDate))) continue;
+    for (const time of parseTimes(med.fixedTimes)) doses.push(createDose(med, time, "fixed", "\u56fa\u5b9a\u65f6\u95f4", viewDate));
+    for (const time of parseTimes(med.flexibleTimes)) doses.push(createDose(med, time, "flexible", "\u975e\u56fa\u5b9a\u65f6\u95f4", viewDate));
     for (const meal of Object.keys(med.mealBefore)) {
       if (!med.mealBefore[meal]) continue;
       const time = minutesToTime(timeToMinutes(mealTimes[meal]) - med.mealBeforeMinutes);
-      doses.push(createDose(med, time, `${meal}-before`, `${mealLabels[meal]} ${med.mealBeforeMinutes} 分钟`));
+      doses.push(createDose(med, time, `${meal}-before`, `${mealLabels[meal]} ${med.mealBeforeMinutes} \u5206\u949f`, viewDate));
     }
-    if (med.bedtimeEnabled) doses.push(createDose(med, state.settings.bedtime, "bedtime", "睡前"));
+    if (med.bedtimeEnabled) doses.push(createDose(med, state.settings.bedtime, "bedtime", "\u7761\u524d", viewDate));
   }
   return doses
     .map((dose) => ({ ...dose, ...(state.doses[dose.id] || {}) }))
     .sort((a, b) => timeToMinutes(displayTime(a)) - timeToMinutes(displayTime(b)));
 }
 
-function createDose(med, time, reason, group) {
+function createDose(med, time, reason, group, viewDate = state.settings.viewDate) {
   return {
-    id: `${state.settings.viewDate}-${med.id}-${time}-${reason}`,
+    id: `${viewDate}-${med.id}-${time}-${reason}`,
     medicineId: med.id,
     time,
     reason,
@@ -255,11 +301,11 @@ function render() {
   els.doneCount.textContent = doses.filter((d) => d.status === "done").length;
   els.pendingCount.textContent = doses.filter((d) => d.status !== "done").length;
   els.lateCount.textContent = doses.filter(isLate).length;
-  els.viewDate.value = state.settings.viewDate;
-  renderTimePair("breakfastTime", "早餐", state.settings.breakfastTime);
-  renderTimePair("lunchTime", "午餐", state.settings.lunchTime);
-  renderTimePair("dinnerTime", "晚饭", state.settings.dinnerTime);
-  renderTimePair("bedtime", "睡前", state.settings.bedtime);
+  renderCalendar();
+  renderWheelTime("breakfastTime", "\u65e9\u9910", state.settings.breakfastTime);
+  renderWheelTime("lunchTime", "\u5348\u9910", state.settings.lunchTime);
+  renderWheelTime("dinnerTime", "\u665a\u996d", state.settings.dinnerTime);
+  renderWheelTime("bedtime", "\u7761\u524d", state.settings.bedtime);
   renderReminderSettings();
   renderMedicines();
   renderNextDose(doses);
@@ -267,24 +313,99 @@ function render() {
   renderActiveReminder(doses);
 }
 
-function renderTimePair(id, label, value) {
+function renderWheelTime(id, label, value) {
   const host = document.querySelector(`#${id}`);
   const [h, m] = normalizeTime(value).split(":");
-  host.className = "time-pair";
+  host.className = "time-wheel";
   host.innerHTML = `
     <span>${label}</span>
-    <label>时<input data-time="${id}" data-part="hour" type="number" min="0" max="23" value="${h}" /></label>
-    <label>分<input data-time="${id}" data-part="minute" type="number" min="0" max="59" value="${m}" /></label>
+    <select data-time="${id}" data-part="hour">${Array.from({ length: 24 }, (_, i) => `<option value="${String(i).padStart(2, "0")}" ${String(i).padStart(2, "0") === h ? "selected" : ""}>${String(i).padStart(2, "0")}</option>`).join("")}</select>
+    <select data-time="${id}" data-part="minute">${Array.from({ length: 60 }, (_, i) => `<option value="${String(i).padStart(2, "0")}" ${String(i).padStart(2, "0") === m ? "selected" : ""}>${String(i).padStart(2, "0")}</option>`).join("")}</select>
   `;
+}
+
+function renderCalendar() {
+  if (!els.calendarPanel) return;
+  const selected = dateFromKey(state.settings.viewDate);
+  calendarCursor = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth(), 1);
+  renderCalendarControls();
+  renderWeekCalendar(selected);
+  renderMonthCalendar(selected);
+  els.monthCalendar.hidden = !calendarExpanded;
+  els.calendarExpandBtn.classList.toggle("expanded", calendarExpanded);
+}
+
+function renderCalendarControls() {
+  const year = calendarCursor.getFullYear();
+  const month = calendarCursor.getMonth();
+  els.calendarYear.innerHTML = Array.from({ length: 21 }, (_, index) => year - 10 + index)
+    .map((item) => `<option value="${item}" ${item === year ? "selected" : ""}>${item}年</option>`)
+    .join("");
+  els.calendarMonth.innerHTML = Array.from({ length: 12 }, (_, index) => index)
+    .map((item) => `<option value="${item}" ${item === month ? "selected" : ""}>${item + 1}月</option>`)
+    .join("");
+}
+
+function renderWeekCalendar(selected) {
+  const weekStart = startOfWeek(selected);
+  els.weekCalendar.innerHTML = DAYS.map((label, index) => {
+    const date = addDays(weekStart, index);
+    return calendarDayButton(date, label, selected, true);
+  }).join("");
+}
+
+function renderMonthCalendar(selected) {
+  const first = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth(), 1);
+  const gridStart = startOfWeek(first);
+  const cells = Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
+  els.monthCalendar.innerHTML = `
+    <div class="calendar-weekdays">${DAYS.map((day) => `<span>${day}</span>`).join("")}</div>
+    <div class="calendar-month-grid">
+      ${cells.map((date) => calendarDayButton(date, "", selected, false)).join("")}
+    </div>
+  `;
+}
+
+function calendarDayButton(date, label, selected, compact) {
+  const isSelected = isSameDay(date, selected);
+  const isToday = isSameDay(date, new Date());
+  const outside = date.getMonth() !== calendarCursor.getMonth();
+  const dayKey = dateKey(date);
+  const completion = calendarCompletionClass(dayKey);
+  return `
+    <button
+      class="calendar-day ${compact ? "compact" : ""} ${completion} ${isSelected ? "selected" : ""} ${isToday ? "today" : ""} ${outside ? "outside" : ""}"
+      data-date="${dayKey}"
+      type="button"
+    >
+      ${label ? `<span>${label}</span>` : ""}
+      <strong>${date.getDate()}</strong>
+    </button>
+  `;
+}
+
+function calendarCompletionClass(dayKey) {
+  if (dateFromKey(dayKey) >= dateFromKey(dateKey(new Date()))) return "";
+  const doses = buildDoses(dayKey);
+  if (!doses.length) return "";
+  const done = doses.filter((dose) => dose.status === "done").length;
+  if (done === doses.length) return "complete";
+  if (done / doses.length < 0.5) return "low";
+  return "partial";
+}
+
+function shiftCalendar(years, months) {
+  calendarCursor = new Date(calendarCursor.getFullYear() + years, calendarCursor.getMonth() + months, 1);
+  renderCalendar();
 }
 
 function renderReminderSettings() {
   const items = [
-    ["notification", "通知弹窗"],
-    ["vibrate", "震动提醒"],
-    ["sound", "铃声提醒"],
-    ["lockScreen", "锁屏操作"],
-    ["fullScreen", "强提醒全屏"],
+    ["notification", "\u901a\u77e5\u5f39\u7a97"],
+    ["vibrate", "\u9707\u52a8\u63d0\u9192"],
+    ["sound", "\u94c3\u58f0\u63d0\u9192"],
+    ["lockScreen", "\u9501\u5c4f\u64cd\u4f5c"],
+    ["fullScreen", "\u5f3a\u63d0\u9192\u5168\u5c4f"],
   ];
   els.reminderSettings.innerHTML = items
     .map(([key, label]) => `
@@ -309,7 +430,7 @@ function renderMedicines() {
           <strong>${escapeHtml(med.name)}</strong>
           <p class="muted">${escapeHtml(med.doseAmount)} · ${escapeHtml(progressText(med))}</p>
         </div>
-        <button class="mini-button" data-edit="${med.id}" type="button">编辑</button>
+        <button class="mini-button" data-edit="${med.id}" type="button">\u7f16\u8f91</button>
       </div>
       <p class="rule-summary">${escapeHtml(summaryRules(med))}</p>
     `;
@@ -319,46 +440,47 @@ function renderMedicines() {
 
 function summaryRules(med) {
   const rules = [];
-  if (med.fixedTimes) rules.push(`固定 ${med.fixedTimes}`);
-  if (med.flexibleTimes) rules.push(`非固定 ${med.flexibleTimes}`);
-  if (med.mealBefore.breakfast) rules.push("早餐前");
-  if (med.mealBefore.lunch) rules.push("午餐前");
-  if (med.mealBefore.dinner) rules.push("晚饭前");
-  if (med.bedtimeEnabled) rules.push("睡前");
-  return rules.length ? rules.join(" · ") : "还没有设置提醒时间";
+  if (med.fixedTimes) rules.push(`\u56fa\u5b9a ${med.fixedTimes}`);
+  if (med.flexibleTimes) rules.push(`\u975e\u56fa\u5b9a ${med.flexibleTimes}`);
+  if (med.mealBefore.breakfast) rules.push("\u65e9\u9910\u524d");
+  if (med.mealBefore.lunch) rules.push("\u5348\u9910\u524d");
+  if (med.mealBefore.dinner) rules.push("\u665a\u996d\u524d");
+  if (med.bedtimeEnabled) rules.push("\u7761\u524d");
+  return rules.length ? rules.join(" · ") : "\u8fd8\u6ca1\u6709\u8bbe\u7f6e\u63d0\u9192\u65f6\u95f4";
 }
 
 function renderNextDose(doses) {
   const next = doses.find((d) => d.status !== "done");
   if (!next) {
-    els.nextDoseText.textContent = "当前查看日期没有待确认提醒。";
+    els.nextDoseText.textContent = "\u5f53\u524d\u67e5\u770b\u65e5\u671f\u6ca1\u6709\u5f85\u786e\u8ba4\u63d0\u9192\u3002";
     return;
   }
   const names = doses
     .filter((d) => displayTime(d) === displayTime(next) && d.status !== "done")
     .map((d) => medInfo(d.medicineId)?.name)
     .filter(Boolean)
-    .join("、");
-  els.nextDoseText.textContent = `下一次 ${displayTime(next)}：${names}`;
+    .join("\u3001");
+  els.nextDoseText.textContent = `\u4e0b\u4e00\u6b21 ${displayTime(next)}\uff1a${names}`;
 }
 
 function renderTimeline(doses) {
   els.timeline.innerHTML = "";
   const groups = groupDoses(doses);
   if (!groups.size) {
-    els.timeline.innerHTML = `<div class="empty-state timeline-empty">这一天没有需要提醒的药品。可以添加时间或调整循环日期。</div>`;
+    els.timeline.innerHTML = `<div class="empty-state timeline-empty">\u8fd9\u4e00\u5929\u6ca1\u6709\u9700\u8981\u63d0\u9192\u7684\u836f\u54c1\u3002\u53ef\u4ee5\u6dfb\u52a0\u65f6\u95f4\u6216\u8c03\u6574\u5faa\u73af\u65e5\u671f\u3002</div>`;
     return;
   }
   for (const [time, group] of groups) {
     const allDone = group.every((d) => d.status === "done");
+    const anyLate = group.some(isLate);
     const card = document.createElement("article");
     card.className = "dose-card";
     card.innerHTML = `
       <div class="dose-time">${time}</div>
       <div class="dose-body">
         <div class="dose-title-row">
-          <strong>${group.map((d) => medInfo(d.medicineId)?.name).filter(Boolean).join("、")}</strong>
-          <span class="tag ${allDone ? "done" : group.some(isLate) ? "late" : ""}">${allDone ? "已完成" : group.some(isLate) ? "逾期未确认" : "待确认"}</span>
+          <strong>${group.map((d) => medInfo(d.medicineId)?.name).filter(Boolean).join("\u3001")}</strong>
+          <span class="tag ${allDone ? "done" : anyLate ? "late" : ""}">${allDone ? "\u5df2\u5b8c\u6210" : anyLate ? "\u903e\u671f\u672a\u786e\u8ba4" : "\u5f85\u786e\u8ba4"}</span>
         </div>
         <div class="med-list">${group.map(renderDoseItem).join("")}</div>
       </div>
@@ -375,11 +497,11 @@ function renderDoseItem(dose) {
       <button class="med-check" data-done="${dose.id}" type="button">${dose.status === "done" ? "✓" : ""}</button>
       <div>
         <span class="med-name">${escapeHtml(med.name)}</span>
-        <span class="med-note">${escapeHtml(med.doseAmount)} · ${escapeHtml(dose.group)}${dose.delayedTo ? `，已延后到 ${dose.delayedTo}` : ""}</span>
+        <span class="med-note">${escapeHtml(med.doseAmount)} · ${escapeHtml(dose.group)}${dose.delayedTo ? `\uff0c\u5df2\u5ef6\u540e\u5230 ${dose.delayedTo}` : ""}</span>
       </div>
       <div class="mini-actions">
-        <button class="mini-button" data-done="${dose.id}" type="button">确认</button>
-        <button class="mini-button warn" data-delay="${dose.id}" type="button">延后</button>
+        <button class="mini-button" data-done="${dose.id}" type="button">\u786e\u8ba4</button>
+        <button class="mini-button warn" data-delay="${dose.id}" type="button">\u5ef6\u540e</button>
       </div>
     </div>
   `;
@@ -389,17 +511,19 @@ function renderActiveReminder(doses) {
   const active = doses.filter((d) => state.activeIds.includes(d.id) && d.status !== "done");
   if (!active.length) {
     els.activeReminder.className = "active-reminder empty-state";
-    els.activeReminder.textContent = "还没有触发提醒。";
+    els.activeReminder.textContent = "\u8fd8\u6ca1\u6709\u89e6\u53d1\u63d0\u9192\u3002";
     return;
   }
   els.activeReminder.className = "active-reminder";
-  els.activeReminder.innerHTML = `<strong>${displayTime(active[0])} 需要确认</strong><div class="med-list">${active.map(renderDoseItem).join("")}</div>`;
+  els.activeReminder.innerHTML = `<strong>${displayTime(active[0])} \u9700\u8981\u786e\u8ba4</strong><div class="med-list">${active.map(renderDoseItem).join("")}</div>`;
 }
 
 function openMedicineDialog(med) {
   editingId = med?.id || null;
-  draft = structuredClone(med || createMedicine({ name: `新药品 ${state.medicines.length + 1}`, fixedTimes: "08:00", color: PALETTE[state.medicines.length % PALETTE.length] }));
-  els.medicineDialogTitle.textContent = editingId ? "编辑药品" : "添加药品";
+  draft = structuredClone(
+    med || createMedicine({ name: `\u65b0\u836f\u54c1 ${state.medicines.length + 1}`, fixedTimes: "08:00", color: PALETTE[state.medicines.length % PALETTE.length] }),
+  );
+  els.medicineDialogTitle.textContent = editingId ? "\u7f16\u8f91\u836f\u54c1" : "\u6dfb\u52a0\u836f\u54c1";
   els.deleteMedicineBtn.hidden = !editingId;
   renderMedicineEditor();
   els.medicineDialog.showModal();
@@ -408,26 +532,26 @@ function openMedicineDialog(med) {
 function renderMedicineEditor() {
   els.medicineEditor.innerHTML = `
     <div class="form-grid editor-grid">
-      ${field("name", "名称", "text", draft.name)}
-      ${field("doseAmount", "用量", "text", draft.doseAmount)}
-      ${field("startDate", "开始日期", "date", draft.startDate)}
-      ${field("courseLength", "每疗程天数", "number", draft.courseLength)}
-      ${field("totalCourses", "疗程数", "number", draft.totalCourses)}
-      ${field("fixedTimes", "固定时间", "text", draft.fixedTimes, "08:00, 20:00")}
-      ${field("flexibleTimes", "非固定时间", "text", draft.flexibleTimes, "今天临时 16:30")}
-      ${field("mealBeforeMinutes", "饭前提前分钟", "number", draft.mealBeforeMinutes)}
+      ${field("name", "\u540d\u79f0", "text", draft.name)}
+      ${field("doseAmount", "\u7528\u91cf", "text", draft.doseAmount)}
+      ${field("startDate", "\u5f00\u59cb\u65e5\u671f", "date", draft.startDate)}
+      ${field("courseLength", "\u6bcf\u7597\u7a0b\u5929\u6570", "number", draft.courseLength)}
+      ${field("totalCourses", "\u7597\u7a0b\u6570", "number", draft.totalCourses)}
+      ${field("fixedTimes", "\u56fa\u5b9a\u65f6\u95f4", "text", draft.fixedTimes, "08:00, 20:00")}
+      ${field("flexibleTimes", "\u975e\u56fa\u5b9a\u65f6\u95f4", "text", draft.flexibleTimes, "\u4eca\u5929\u4e34\u65f6 16:30")}
+      ${field("mealBeforeMinutes", "\u996d\u524d\u63d0\u524d\u5206\u949f", "number", draft.mealBeforeMinutes)}
     </div>
     <div>
-      <p class="repeat-title">颜色</p>
+      <p class="repeat-title">\u989c\u8272</p>
       <div class="palette">${PALETTE.map((color) => `<button class="palette-dot ${draft.color === color ? "selected" : ""}" data-color="${color}" style="--dot:${color}" type="button"></button>`).join("")}</div>
     </div>
     <div class="option-row">
-      ${check("breakfast", "早餐前", draft.mealBefore.breakfast)}
-      ${check("lunch", "午餐前", draft.mealBefore.lunch)}
-      ${check("dinner", "晚饭前", draft.mealBefore.dinner)}
-      ${check("bedtimeEnabled", "睡前", draft.bedtimeEnabled)}
+      ${check("breakfast", "\u65e9\u9910\u524d", draft.mealBefore.breakfast)}
+      ${check("lunch", "\u5348\u9910\u524d", draft.mealBefore.lunch)}
+      ${check("dinner", "\u665a\u996d\u524d", draft.mealBefore.dinner)}
+      ${check("bedtimeEnabled", "\u7761\u524d", draft.bedtimeEnabled)}
     </div>
-    <div class="repeat-days"><span class="repeat-title">循环日期</span>${DAYS.map((d, i) => `<button class="day-chip ${draft.repeatDays.includes(i) ? "selected" : ""}" data-day="${i}" type="button">${d}</button>`).join("")}</div>
+    <div class="repeat-days"><span class="repeat-title">\u5faa\u73af\u65e5\u671f</span>${DAYS.map((d, i) => `<button class="day-chip ${draft.repeatDays.includes(i) ? "selected" : ""}" data-day="${i}" type="button">${d}</button>`).join("")}</div>
   `;
 }
 
@@ -443,7 +567,7 @@ function saveDraft() {
   const med = createMedicine(draft);
   if (editingId) state.medicines = state.medicines.map((m) => (m.id === editingId ? med : m));
   else state.medicines.push(med);
-  saveState();
+  saveState("\u5df2\u4fdd\u5b58");
   render();
 }
 
@@ -452,7 +576,7 @@ function deleteEditing() {
   state.medicines = state.medicines.filter((m) => m.id !== editingId);
   for (const key of Object.keys(state.doses)) if (key.includes(`-${editingId}-`)) delete state.doses[key];
   state.activeIds = state.activeIds.filter((id) => !id.includes(`-${editingId}-`));
-  saveState();
+  saveState("\u5df2\u5220\u9664");
   render();
 }
 
@@ -461,22 +585,35 @@ function escapeHtml(value) {
 }
 
 function bindEvents() {
-  els.viewDate.addEventListener("change", () => {
-    state.settings.viewDate = els.viewDate.value;
-    state.activeIds = [];
-    saveState();
-    render();
+  els.dateToggleBtn.addEventListener("click", () => {
+    els.calendarPanel.hidden = !els.calendarPanel.hidden;
+    calendarCursor = dateFromKey(state.settings.viewDate);
+    renderCalendar();
   });
-  document.addEventListener("input", (event) => {
+  els.calendarExpandBtn.addEventListener("click", () => {
+    calendarExpanded = !calendarExpanded;
+    renderCalendar();
+  });
+  els.prevYearBtn.addEventListener("click", () => shiftCalendar(-1, 0));
+  els.nextYearBtn.addEventListener("click", () => shiftCalendar(1, 0));
+  els.prevMonthBtn.addEventListener("click", () => shiftCalendar(0, -1));
+  els.nextMonthBtn.addEventListener("click", () => shiftCalendar(0, 1));
+  els.calendarYear.addEventListener("change", () => {
+    calendarCursor = new Date(Number(els.calendarYear.value), calendarCursor.getMonth(), 1);
+    renderCalendar();
+  });
+  els.calendarMonth.addEventListener("change", () => {
+    calendarCursor = new Date(calendarCursor.getFullYear(), Number(els.calendarMonth.value), 1);
+    renderCalendar();
+  });
+  document.addEventListener("change", (event) => {
     const target = event.target;
     if (target.dataset.time) {
       const current = normalizeTime(state.settings[target.dataset.time]);
       const [h, m] = current.split(":");
-      const next = target.dataset.part === "hour"
-        ? `${String(Math.min(23, Number(target.value) || 0)).padStart(2, "0")}:${m}`
-        : `${h}:${String(Math.min(59, Number(target.value) || 0)).padStart(2, "0")}`;
-      state.settings[target.dataset.time] = next;
+      state.settings[target.dataset.time] = target.dataset.part === "hour" ? `${target.value}:${m}` : `${h}:${target.value}`;
       saveState();
+      render();
     }
     if (target.dataset.setting) {
       state.settings[target.dataset.setting] = target.checked;
@@ -496,12 +633,15 @@ function bindEvents() {
   });
   document.addEventListener("click", (event) => {
     const target = event.target;
+    if (target.closest("[data-date]")) {
+      setViewDate(target.closest("[data-date]").dataset.date);
+    }
     if (target.dataset.edit) openMedicineDialog(state.medicines.find((m) => m.id === target.dataset.edit));
     if (target.dataset.done) setDose(target.dataset.done, { status: "done" });
     if (target.dataset.delay) {
       delayTargetId = target.dataset.delay;
       const dose = buildDoses().find((d) => d.id === delayTargetId);
-      els.delayTitle.textContent = `延后 ${medInfo(dose?.medicineId)?.name || "药品"}`;
+      els.delayTitle.textContent = `\u5ef6\u540e ${medInfo(dose?.medicineId)?.name || "\u836f\u54c1"}`;
       els.delayDialog.showModal();
     }
     if (target.dataset.color && draft) {
@@ -516,11 +656,13 @@ function bindEvents() {
       renderMedicineEditor();
     }
   });
-  els.addMedicineBtn.addEventListener("click", () => openMedicineDialog(null));
+  els.fabAddBtn.addEventListener("click", () => openMedicineDialog(null));
+  els.moreBtn.addEventListener("click", () => els.settingsDialog.showModal());
   els.resetBtn.addEventListener("click", () => {
     localStorage.removeItem(STORAGE_KEY);
     state = loadState();
     render();
+    showToast("\u5df2\u91cd\u7f6e");
   });
   els.simulateBtn.addEventListener("click", () => {
     const doses = buildDoses();
