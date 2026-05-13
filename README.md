@@ -1,5 +1,5 @@
 # Mediassist
-# 用要提醒APP
+# 用药提醒APP
 
 Mediassist is a medication reminder app prototype designed for people who need to manage multiple medicines, different dosing schedules, meal-related timing rules, and treatment-course progress.
 
