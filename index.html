@@ -19,7 +19,9 @@
         </div>
         <div class="top-actions">
           <button id="moreBtn" class="icon-button" type="button" aria-label="Settings">⋮</button>
-          <button id="resetBtn" class="ghost-button" type="button">&#37325;&#32622;</button>
+          <div id="actionMenu" class="action-menu" hidden>
+            <button id="openSettingsBtn" type="button">&#25805;&#20316;&#38754;&#26495;</button>
+          </div>
         </div>
       </section>
 
@@ -46,27 +48,17 @@
         <article><span id="lateCount">0</span><p>&#36830;&#26399;</p></article>
       </section>
 
-      <details class="panel medicine-panel">
-        <summary>
-          <div>
-            <h2>&#33647;&#21697;&#31649;&#29702;</h2>
-            <p class="muted">&#28155;&#21152;&#21644;&#32534;&#36753;&#22312;&#31383;&#21475;&#37324;&#23436;&#25104;&#65292;&#20027;&#23631;&#20248;&#20808;&#20445;&#30041;&#29992;&#33647;&#30830;&#35748;&#12290;</p>
-          </div>
-          <span class="arrow">⌄</span>
-        </summary>
-        <div id="medicineSettings" class="medicine-settings"></div>
-      </details>
-
       <section class="timeline-section">
-        <div class="section-heading">
-          <div>
-            <h2>&#29992;&#33647;&#30830;&#35748;</h2>
-            <p id="nextDoseText" class="muted"></p>
-          </div>
+        <div class="timeline-toolbar">
+          <p id="nextDoseText" class="muted"></p>
           <button id="simulateBtn" class="ghost-button" type="button">&#27169;&#25311;&#25552;&#37266;</button>
         </div>
         <div id="activeReminder" class="active-reminder empty-state">&#36824;&#27809;&#26377;&#35302;&#21457;&#25552;&#37266;&#12290;</div>
         <div id="timeline" class="timeline"></div>
+        <div class="completed-area">
+          <button id="completedToggleBtn" class="completed-toggle" type="button" hidden></button>
+          <div id="completedTimeline" class="timeline completed-timeline" hidden></div>
+        </div>
       </section>
     </main>
 
@@ -98,7 +90,19 @@
           <div id="reminderSettings" class="switch-grid"></div>
         </section>
 
+        <section class="settings-section">
+          <div class="settings-section-heading">
+            <div>
+              <h3>&#33647;&#21697;&#31649;&#29702;</h3>
+              <p class="muted">&#28155;&#21152;&#21644;&#32534;&#36753;&#33647;&#21697;&#20449;&#24687;&#12290;</p>
+            </div>
+            <button id="manageAddBtn" class="ghost-button" type="button">&#28155;&#21152;&#33647;&#21697;</button>
+          </div>
+          <div id="medicineSettings" class="medicine-settings"></div>
+        </section>
+
         <menu>
+          <button id="resetBtn" class="danger-button" value="reset" type="button">&#37325;&#32622;</button>
           <span class="menu-spacer"></span>
           <button class="primary-button" value="close" type="submit">&#23436;&#25104;</button>
         </menu>

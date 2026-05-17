@@ -3,6 +3,7 @@ const DAYS = ["\u65e5", "\u4e00", "\u4e8c", "\u4e09", "\u56db", "\u4e94", "\u516
 const PALETTE = ["#1f7a5a", "#235d8d", "#b45f06", "#7a3db8", "#b44336", "#59722e", "#0f766e", "#9a3412"];
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
+// Persisted application shape. Runtime-only UI state lives separately below.
 const defaults = {
   settings: {
     viewDate: dateKey(new Date()),
@@ -27,8 +28,10 @@ let draft = null;
 let delayTargetId = null;
 let toastTimer = null;
 let calendarExpanded = false;
+let completedExpanded = false;
 let calendarCursor = dateFromKey(state.settings.viewDate);
 
+// Cache the stable DOM nodes once so render functions can stay focused on output.
 const els = {
   todayLabel: document.querySelector("#todayLabel"),
   dateToggleBtn: document.querySelector("#dateToggleBtn"),
@@ -47,12 +50,17 @@ const els = {
   pendingCount: document.querySelector("#pendingCount"),
   lateCount: document.querySelector("#lateCount"),
   timeline: document.querySelector("#timeline"),
+  completedToggleBtn: document.querySelector("#completedToggleBtn"),
+  completedTimeline: document.querySelector("#completedTimeline"),
   activeReminder: document.querySelector("#activeReminder"),
   nextDoseText: document.querySelector("#nextDoseText"),
   medicineSettings: document.querySelector("#medicineSettings"),
   reminderSettings: document.querySelector("#reminderSettings"),
   moreBtn: document.querySelector("#moreBtn"),
+  actionMenu: document.querySelector("#actionMenu"),
+  openSettingsBtn: document.querySelector("#openSettingsBtn"),
   settingsDialog: document.querySelector("#settingsDialog"),
+  manageAddBtn: document.querySelector("#manageAddBtn"),
   fabAddBtn: document.querySelector("#fabAddBtn"),
   resetBtn: document.querySelector("#resetBtn"),
   simulateBtn: document.querySelector("#simulateBtn"),
@@ -65,6 +73,7 @@ const els = {
   toast: document.querySelector("#toast"),
 };
 
+// Seed data keeps the prototype useful immediately after a reset.
 function seedMedicines() {
   const today = dateKey(new Date());
   return [
@@ -83,6 +92,7 @@ function seedMedicines() {
 }
 
 function createMedicine(overrides = {}) {
+  // Normalize partially saved objects so older storage versions remain usable.
   return {
     id: overrides.id || createId(),
     name: overrides.name || "\u65b0\u836f\u54c1",
@@ -104,7 +114,10 @@ function createMedicine(overrides = {}) {
   };
 }
 
+// ---------- Persistence and lightweight feedback ----------
+
 function loadState() {
+  const today = dateKey(new Date());
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) return { ...structuredClone(defaults), medicines: seedMedicines() };
   try {
@@ -112,8 +125,10 @@ function loadState() {
     return {
       ...structuredClone(defaults),
       ...parsed,
-      settings: { ...defaults.settings, ...parsed.settings },
+      // Reopen on today even when the last browsing session ended on another date.
+      settings: { ...defaults.settings, ...parsed.settings, viewDate: today },
       medicines: Array.isArray(parsed.medicines) ? parsed.medicines.map(createMedicine) : seedMedicines(),
+      activeIds: [],
     };
   } catch {
     return { ...structuredClone(defaults), medicines: seedMedicines() };
@@ -131,6 +146,8 @@ function showToast(message) {
   els.toast.classList.add("visible");
   toastTimer = setTimeout(() => els.toast.classList.remove("visible"), 1800);
 }
+
+// ---------- Date and time helpers ----------
 
 function dateKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -159,6 +176,7 @@ function setViewDate(key) {
   state.settings.viewDate = key;
   calendarCursor = dateFromKey(key);
   state.activeIds = [];
+  completedExpanded = false;
   saveState();
   render();
 }
@@ -184,6 +202,7 @@ function normalizeTime(value) {
 }
 
 function parseTimes(value) {
+  // Accept both Chinese/English punctuation while storing one canonical form.
   return String(value)
     .split(/[,，\s]+/)
     .map((item) => item.trim())
@@ -197,11 +216,14 @@ function parseTimes(value) {
     .sort((a, b) => timeToMinutes(a) - timeToMinutes(b));
 }
 
+// ---------- Medication rules and generated dose instances ----------
+
 function selectedDay(viewDate = state.settings.viewDate) {
   return dateFromKey(viewDate).getDay();
 }
 
 function courseProgress(med, viewDate = state.settings.viewDate) {
+  // A medicine can span multiple courses, but progress is still tracked per medicine.
   const start = dateFromKey(med.startDate);
   const view = dateFromKey(viewDate);
   const dayCount = Math.round((view - start) / 86400000) + 1;
@@ -226,6 +248,7 @@ function progressText(med) {
 }
 
 function buildDoses(viewDate = state.settings.viewDate) {
+  // Build the visible timeline from medicine rules instead of storing duplicate rows.
   const mealTimes = {
     breakfast: state.settings.breakfastTime,
     lunch: state.settings.lunchTime,
@@ -250,6 +273,7 @@ function buildDoses(viewDate = state.settings.viewDate) {
 }
 
 function createDose(med, time, reason, group, viewDate = state.settings.viewDate) {
+  // The generated id ties a dose to one date, one medicine, and one rule source.
   return {
     id: `${viewDate}-${med.id}-${time}-${reason}`,
     medicineId: med.id,
@@ -285,11 +309,15 @@ function groupDoses(doses) {
 
 function setDose(id, patch) {
   state.doses[id] = { ...(state.doses[id] || {}), ...patch };
+  if (patch.status === "done") completedExpanded = false;
   saveState();
   render();
 }
 
+// ---------- Top-level rendering ----------
+
 function render() {
+  // One render pass fans out from the same generated dose list to keep counts aligned.
   const doses = buildDoses();
   els.todayLabel.textContent = dateFromKey(state.settings.viewDate).toLocaleDateString("zh-CN", {
     year: "numeric",
@@ -324,6 +352,8 @@ function renderWheelTime(id, label, value) {
   `;
 }
 
+// ---------- Calendar rendering ----------
+
 function renderCalendar() {
   if (!els.calendarPanel) return;
   const selected = dateFromKey(state.settings.viewDate);
@@ -355,6 +385,7 @@ function renderWeekCalendar(selected) {
 }
 
 function renderMonthCalendar(selected) {
+  // Render a fixed 6-week grid so month height does not jump between months.
   const first = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth(), 1);
   const gridStart = startOfWeek(first);
   const cells = Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
@@ -385,6 +416,7 @@ function calendarDayButton(date, label, selected, compact) {
 }
 
 function calendarCompletionClass(dayKey) {
+  // Past dates are colored by adherence; today and future dates stay neutral.
   if (dateFromKey(dayKey) >= dateFromKey(dateKey(new Date()))) return "";
   const doses = buildDoses(dayKey);
   if (!doses.length) return "";
@@ -398,6 +430,8 @@ function shiftCalendar(years, months) {
   calendarCursor = new Date(calendarCursor.getFullYear() + years, calendarCursor.getMonth() + months, 1);
   renderCalendar();
 }
+
+// ---------- Settings and medicine-management rendering ----------
 
 function renderReminderSettings() {
   const items = [
@@ -449,6 +483,8 @@ function summaryRules(med) {
   return rules.length ? rules.join(" · ") : "\u8fd8\u6ca1\u6709\u8bbe\u7f6e\u63d0\u9192\u65f6\u95f4";
 }
 
+// ---------- Daily reminder timeline rendering ----------
+
 function renderNextDose(doses) {
   const next = doses.find((d) => d.status !== "done");
   if (!next) {
@@ -465,31 +501,51 @@ function renderNextDose(doses) {
 
 function renderTimeline(doses) {
   els.timeline.innerHTML = "";
-  const groups = groupDoses(doses);
-  if (!groups.size) {
+  els.completedTimeline.innerHTML = "";
+  // Keep the main task surface focused on what still needs attention.
+  const pendingDoses = doses.filter((dose) => dose.status !== "done");
+  const completedDoses = doses.filter((dose) => dose.status === "done");
+  const pendingGroups = groupDoses(pendingDoses);
+  const completedGroups = groupDoses(completedDoses);
+
+  if (!doses.length) {
     els.timeline.innerHTML = `<div class="empty-state timeline-empty">\u8fd9\u4e00\u5929\u6ca1\u6709\u9700\u8981\u63d0\u9192\u7684\u836f\u54c1\u3002\u53ef\u4ee5\u6dfb\u52a0\u65f6\u95f4\u6216\u8c03\u6574\u5faa\u73af\u65e5\u671f\u3002</div>`;
-    return;
+  } else if (!pendingGroups.size) {
+    els.timeline.innerHTML = `<div class="empty-state timeline-empty">\u5f53\u524d\u67e5\u770b\u65e5\u671f\u7684\u836f\u54c1\u5df2\u5168\u90e8\u786e\u8ba4\u3002</div>`;
+  } else {
+    for (const [time, group] of pendingGroups) {
+      els.timeline.append(renderDoseCard(time, group, false));
+    }
   }
-  for (const [time, group] of groups) {
-    const allDone = group.every((d) => d.status === "done");
-    const anyLate = group.some(isLate);
-    const card = document.createElement("article");
-    card.className = "dose-card";
-    card.innerHTML = `
-      <div class="dose-time">${time}</div>
-      <div class="dose-body">
-        <div class="dose-title-row">
-          <strong>${group.map((d) => medInfo(d.medicineId)?.name).filter(Boolean).join("\u3001")}</strong>
-          <span class="tag ${allDone ? "done" : anyLate ? "late" : ""}">${allDone ? "\u5df2\u5b8c\u6210" : anyLate ? "\u903e\u671f\u672a\u786e\u8ba4" : "\u5f85\u786e\u8ba4"}</span>
-        </div>
-        <div class="med-list">${group.map(renderDoseItem).join("")}</div>
-      </div>
-    `;
-    els.timeline.append(card);
+
+  els.completedToggleBtn.hidden = !completedDoses.length;
+  els.completedToggleBtn.textContent = `${completedExpanded ? "\u6536\u8d77" : "\u67e5\u770b"}\u5df2\u5b8c\u6210\u836f\u54c1\uff08${completedDoses.length}\uff09`;
+  els.completedTimeline.hidden = !completedExpanded || !completedDoses.length;
+  if (completedExpanded) {
+    for (const [time, group] of completedGroups) {
+      els.completedTimeline.append(renderDoseCard(time, group, true));
+    }
   }
 }
 
-function renderDoseItem(dose) {
+function renderDoseCard(time, group, completed) {
+  const anyLate = group.some(isLate);
+  const card = document.createElement("article");
+  card.className = `dose-card${completed ? " completed-card" : ""}`;
+  card.innerHTML = `
+    <div class="dose-time">${time}</div>
+    <div class="dose-body">
+      <div class="dose-title-row">
+        <strong>${group.map((d) => medInfo(d.medicineId)?.name).filter(Boolean).join("\u3001")}</strong>
+        <span class="tag ${completed ? "done" : anyLate ? "late" : ""}">${completed ? "\u5df2\u5b8c\u6210" : anyLate ? "\u903e\u671f\u672a\u786e\u8ba4" : "\u5f85\u786e\u8ba4"}</span>
+      </div>
+      <div class="med-list">${group.map((dose) => renderDoseItem(dose, completed)).join("")}</div>
+    </div>
+  `;
+  return card;
+}
+
+function renderDoseItem(dose, readOnly = false) {
   const med = medInfo(dose.medicineId);
   if (!med) return "";
   return `
@@ -499,10 +555,10 @@ function renderDoseItem(dose) {
         <span class="med-name">${escapeHtml(med.name)}</span>
         <span class="med-note">${escapeHtml(med.doseAmount)} · ${escapeHtml(dose.group)}${dose.delayedTo ? `\uff0c\u5df2\u5ef6\u540e\u5230 ${dose.delayedTo}` : ""}</span>
       </div>
-      <div class="mini-actions">
+      ${readOnly ? "" : `<div class="mini-actions">
         <button class="mini-button" data-done="${dose.id}" type="button">\u786e\u8ba4</button>
         <button class="mini-button warn" data-delay="${dose.id}" type="button">\u5ef6\u540e</button>
-      </div>
+      </div>`}
     </div>
   `;
 }
@@ -517,6 +573,8 @@ function renderActiveReminder(doses) {
   els.activeReminder.className = "active-reminder";
   els.activeReminder.innerHTML = `<strong>${displayTime(active[0])} \u9700\u8981\u786e\u8ba4</strong><div class="med-list">${active.map(renderDoseItem).join("")}</div>`;
 }
+
+// ---------- Medicine editor ----------
 
 function openMedicineDialog(med) {
   editingId = med?.id || null;
@@ -584,6 +642,8 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[c]);
 }
 
+// ---------- Event wiring ----------
+
 function bindEvents() {
   els.dateToggleBtn.addEventListener("click", () => {
     els.calendarPanel.hidden = !els.calendarPanel.hidden;
@@ -609,6 +669,7 @@ function bindEvents() {
   document.addEventListener("change", (event) => {
     const target = event.target;
     if (target.dataset.time) {
+      // The two select boxes cooperate to update one HH:mm setting.
       const current = normalizeTime(state.settings[target.dataset.time]);
       const [h, m] = current.split(":");
       state.settings[target.dataset.time] = target.dataset.part === "hour" ? `${target.value}:${m}` : `${h}:${target.value}`;
@@ -620,6 +681,7 @@ function bindEvents() {
       saveState();
     }
     if (target.dataset.field && draft) {
+      // Draft changes stay local until the dialog is explicitly saved.
       const key = target.dataset.field;
       draft[key] = ["courseLength", "totalCourses", "mealBeforeMinutes"].includes(key)
         ? Math.max(1, Number(target.value) || 1)
@@ -633,6 +695,10 @@ function bindEvents() {
   });
   document.addEventListener("click", (event) => {
     const target = event.target;
+    // Click-away behavior keeps the compact overflow menu from lingering.
+    if (!target.closest(".top-actions")) {
+      els.actionMenu.hidden = true;
+    }
     if (target.closest("[data-date]")) {
       setViewDate(target.closest("[data-date]").dataset.date);
     }
@@ -649,6 +715,7 @@ function bindEvents() {
       renderMedicineEditor();
     }
     if (target.dataset.day && draft) {
+      // Repeat-day chips behave like a set, then re-sort for stable storage/output.
       const day = Number(target.dataset.day);
       draft.repeatDays = draft.repeatDays.includes(day)
         ? draft.repeatDays.filter((d) => d !== day)
@@ -657,7 +724,18 @@ function bindEvents() {
     }
   });
   els.fabAddBtn.addEventListener("click", () => openMedicineDialog(null));
-  els.moreBtn.addEventListener("click", () => els.settingsDialog.showModal());
+  els.completedToggleBtn.addEventListener("click", () => {
+    completedExpanded = !completedExpanded;
+    render();
+  });
+  els.manageAddBtn.addEventListener("click", () => openMedicineDialog(null));
+  els.moreBtn.addEventListener("click", () => {
+    els.actionMenu.hidden = !els.actionMenu.hidden;
+  });
+  els.openSettingsBtn.addEventListener("click", () => {
+    els.actionMenu.hidden = true;
+    els.settingsDialog.showModal();
+  });
   els.resetBtn.addEventListener("click", () => {
     localStorage.removeItem(STORAGE_KEY);
     state = loadState();
@@ -665,6 +743,7 @@ function bindEvents() {
     showToast("\u5df2\u91cd\u7f6e");
   });
   els.simulateBtn.addEventListener("click", () => {
+    // Browser prototype only: expose the next pending group as a fake active alert.
     const doses = buildDoses();
     const next = doses.find((d) => d.status !== "done");
     if (!next) return;
@@ -682,6 +761,11 @@ function bindEvents() {
     const minutes = Number(els.delayDialog.returnValue);
     if (dose && minutes) setDose(delayTargetId, { status: "delayed", delayedTo: minutesToTime(timeToMinutes(displayTime(dose)) + minutes) });
     delayTargetId = null;
+  });
+  [els.settingsDialog, els.medicineDialog, els.delayDialog].forEach((dialog) => {
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) dialog.close("cancel");
+    });
   });
 }
 
